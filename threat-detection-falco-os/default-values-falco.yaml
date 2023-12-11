@@ -1,0 +1,74 @@
+driver:
+  enabled: true
+  kind: module
+collectors:
+  enabled: true
+
+tty: true # enable live streaming logs
+
+controller:
+  kind: daemonset
+
+falcoctl:
+  artifact:
+    install:
+      enabled: true
+    follow:
+      enabled: true
+  config:
+    artifact:
+      install:
+        resolveDeps: false
+        refs: [falco-rules:2, k8saudit-rules:0.6, cloudtrail-rules:0.8.0]
+      follow:
+        refs: [falco-rules:2, k8saudit-rules:0.6, cloudtrail-rules:0.8.0]
+
+falco:
+  grpc:
+    enabled: true
+  grpc_output:
+    enabled: true
+  rules_file:
+    - /etc/falco/falco_rules.yaml
+    - /etc/falco/rules.d
+    - /etc/falco/custom/cloudtrail-rules.yaml
+    - /etc/falco/custom-rules.d
+  plugins:
+    - name: cloudtrail
+      library_path: libcloudtrail.so
+      init_config: ""
+      open_params: "sqs://ffc"
+    - name: json
+      library_path: libjson.so
+      init_config: ""
+  load_plugins: [cloudtrail, json]
+
+falcosidekick:
+  enabled: true
+  webui:
+    enabled: true
+  config:
+    webhook:
+      address: http://webhook-falco-eventsource-svc.argo-events.svc.cluster.local:12000/falco
+      minimumpriority: debug
+
+extra:
+  env: 
+    - name: AWS_DEFAULT_REGION
+      value: us-east-1
+mounts:
+  volumes: 
+    - name: cloudtrail-rules
+      configMap:
+        name: cloudtrail-rules
+    - name: custom-rules
+      configMap:
+        name: custom-rules
+        optional: true
+  volumeMounts: 
+    - name: cloudtrail-rules
+      mountPath: /etc/falco/custom
+      readOnly: true
+    - name: custom-rules
+      mountPath: /etc/falco/custom-rules.d
+      readOnly: true
